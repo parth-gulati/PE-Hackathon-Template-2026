@@ -32,3 +32,14 @@ Thumbs.db
 
 # Judging (not visible to participants)
 judging/
+
+# Claude
+.claude/
+
+# BMAD
+_bmad/
+_bmad-output/
+
+# Hackathon local files
+quests.md
+csvs/
