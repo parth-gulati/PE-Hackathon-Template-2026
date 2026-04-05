@@ -53,14 +53,20 @@ jobs:
 
       - name: Notify Discord on failure
         if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          curl -H "Content-Type: application/json" \
-            -d '{"content": "🚨 **CI Failed** on `${{ github.ref_name }}` — commit: `${{ github.event.head_commit.message }}` by ${{ github.actor }}\n🔗 ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
-            ${{ secrets.DISCORD_WEBHOOK_URL }}
+          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1 | tr -d '"')
+          curl -s -H "Content-Type: application/json" \
+            -d "{\"content\": \"🚨 **CI Failed** on \`${{ github.ref_name }}\` — ${COMMIT_MSG} by ${{ github.actor }}\n🔗 ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            "$DISCORD_WEBHOOK_URL"
 
       - name: Notify Discord on success
         if: success()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          curl -H "Content-Type: application/json" \
-            -d '{"content": "✅ **CI Passed** on `${{ github.ref_name }}` — commit: `${{ github.event.head_commit.message }}` by ${{ github.actor }}"}' \
-            ${{ secrets.DISCORD_WEBHOOK_URL }}
+          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1 | tr -d '"')
+          curl -s -H "Content-Type: application/json" \
+            -d "{\"content\": \"✅ **CI Passed** on \`${{ github.ref_name }}\` — ${COMMIT_MSG} by ${{ github.actor }}\"}" \
+            "$DISCORD_WEBHOOK_URL"
