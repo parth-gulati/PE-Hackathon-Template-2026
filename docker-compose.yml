@@ -1,3 +1,19 @@
+x-app-common: &app-common
+  build: .
+  environment:
+    DATABASE_NAME: hackathon_db
+    DATABASE_HOST: postgres
+    DATABASE_PORT: 5432
+    DATABASE_USER: postgres
+    DATABASE_PASSWORD: postgres
+    API_KEY: ${API_KEY:-dev-api-key-change-me}
+    RATE_LIMIT: ${RATE_LIMIT:-1000/minute}
+    REDIS_URL: redis://redis:6379/0
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: always
+
 services:
   postgres:
     image: postgres:16
@@ -15,21 +31,42 @@ services:
       timeout: 5s
       retries: 5
 
-  app:
-    build: .
+  redis:
+    image: redis:7-alpine
     ports:
-      - "5000:5000"
-    environment:
-      DATABASE_NAME: hackathon_db
-      DATABASE_HOST: postgres
-      DATABASE_PORT: 5432
-      DATABASE_USER: postgres
-      DATABASE_PASSWORD: postgres
-      API_KEY: ${API_KEY:-dev-api-key-change-me}
-      RATE_LIMIT: ${RATE_LIMIT:-100/minute}
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  app1:
+    <<: *app-common
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  app2:
+    <<: *app-common
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app1
+      - app2
     restart: always
 
 volumes:

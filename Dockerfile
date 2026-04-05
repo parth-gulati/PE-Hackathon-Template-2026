@@ -19,4 +19,4 @@ RUN uv sync --no-dev
 
 EXPOSE 5000
 
-CMD ["uv", "run", "python", "run.py"]
+CMD ["uv", "run", "gunicorn", "-w", "8", "--threads", "4", "-b", "0.0.0.0:5000", "app:create_app()"]

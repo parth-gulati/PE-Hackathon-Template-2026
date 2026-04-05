@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from playhouse.shortcuts import model_to_dict
 
 from app.models.user import User
@@ -8,7 +8,9 @@ users_bp = Blueprint("users", __name__)
 
 @users_bp.route("/users")
 def list_users():
-    users = User.select()
+    page = int(request.args.get("page", 1))
+    per_page = min(int(request.args.get("per_page", 20)), 100)
+    users = User.select().order_by(User.id).paginate(page, per_page)
     return jsonify([model_to_dict(u) for u in users])
 
 

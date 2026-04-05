@@ -22,7 +22,8 @@ def init_db(app):
 
     @app.before_request
     def _db_connect():
-        db.connect(reuse_if_open=True)
+        if db.is_closed():
+            db.connect()
 
     @app.teardown_appcontext
     def _db_close(exc):

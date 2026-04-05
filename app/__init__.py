@@ -25,7 +25,16 @@ def create_app():
     init_db(app)
     limiter.init_app(app)
 
-    from app import models  # noqa: F401 - registers models with Peewee
+    from app.models import Event, Url, User  # noqa: F401 - registers models with Peewee
+
+    # Create tables on startup, then close connection so gunicorn
+    # workers each get their own fresh connection via before_request
+    try:
+        db.connect()
+        db.create_tables([User, Url, Event])
+        db.close()
+    except Exception:
+        pass  # Tables may already exist
 
     register_routes(app)
 

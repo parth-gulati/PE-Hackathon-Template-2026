@@ -17,7 +17,7 @@ MAX_SHORT_CODE_RETRIES = 10
 
 
 @urls_bp.route("/shorten", methods=["POST"])
-@limiter.limit("30/minute")
+@limiter.limit("500/minute")
 @require_api_key
 def create_short_url():
     data = request.get_json(silent=True)
@@ -89,6 +89,11 @@ def list_urls():
     is_active = request.args.get("is_active")
     if is_active is not None:
         query = query.where(Url.is_active == (is_active.lower() == "true"))
+
+    # Pagination
+    page = int(request.args.get("page", 1))
+    per_page = min(int(request.args.get("per_page", 20)), 100)
+    query = query.order_by(Url.id).paginate(page, per_page)
 
     results = []
     for u in query:

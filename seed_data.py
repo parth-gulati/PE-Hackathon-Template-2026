@@ -111,6 +111,14 @@ if __name__ == "__main__":
             sys.exit(0)
 
         result = seed()
+
+        # Reset PostgreSQL sequences after bulk insert with explicit IDs
+        for table in ("users", "urls", "events"):
+            db.execute_sql(
+                f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
+                f"(SELECT MAX(id) FROM {table}))"
+            )
+
         print(
             f"Imported {result['users']} users, {result['urls']} urls, "
             f"{result['events']} events in {result['elapsed_seconds']}s"
