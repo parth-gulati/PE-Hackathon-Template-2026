@@ -1,65 +1,69 @@
 {
-  "dashboard": {
-    "id": null,
-    "uid": "url-shortener",
-    "title": "URL Shortener - Golden Signals",
-    "tags": ["flask", "url-shortener"],
-    "timezone": "browser",
-    "panels": [
-      {
-        "id": 1,
-        "title": "Request Rate (Traffic)",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
-        "targets": [
-          {
-            "expr": "sum(rate(http_requests_total[1m])) by (endpoint)",
-            "legendFormat": "{{endpoint}}"
-          }
-        ]
-      },
-      {
-        "id": 2,
-        "title": "Request Latency (p50 / p95)",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
-        "targets": [
-          {
-            "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[1m])) by (le))",
-            "legendFormat": "p50"
-          },
-          {
-            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le))",
-            "legendFormat": "p95"
-          }
-        ]
-      },
-      {
-        "id": 3,
-        "title": "Error Rate",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
-        "targets": [
-          {
-            "expr": "sum(rate(http_errors_total[1m])) by (endpoint)",
-            "legendFormat": "{{endpoint}}"
-          }
-        ]
-      },
-      {
-        "id": 4,
-        "title": "Active Requests (Saturation)",
-        "type": "gauge",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
-        "targets": [
-          {
-            "expr": "http_active_requests",
-            "legendFormat": "Active"
-          }
-        ]
-      }
-    ],
-    "time": {"from": "now-15m", "to": "now"},
-    "refresh": "5s"
-  }
+  "id": null,
+  "uid": "url-shortener",
+  "title": "URL Shortener - Golden Signals",
+  "tags": ["flask", "url-shortener"],
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request Rate (Traffic)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[1m])) by (endpoint)",
+          "legendFormat": "{{endpoint}}",
+          "datasource": "Prometheus"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Request Latency (p50 / p95)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[1m])) by (le))",
+          "legendFormat": "p50",
+          "datasource": "Prometheus"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le))",
+          "legendFormat": "p95",
+          "datasource": "Prometheus"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Error Rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(http_errors_total[1m])) by (endpoint)",
+          "legendFormat": "{{endpoint}}",
+          "datasource": "Prometheus"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Active Requests (Saturation)",
+      "type": "gauge",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {
+          "expr": "http_active_requests",
+          "legendFormat": "Active",
+          "datasource": "Prometheus"
+        }
+      ]
+    }
+  ],
+  "time": {"from": "now-15m", "to": "now"},
+  "refresh": "5s",
+  "schemaVersion": 39
 }
