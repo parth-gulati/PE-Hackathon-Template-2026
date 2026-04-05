@@ -87,7 +87,7 @@ def bulk_upload_users():
         with db.atomic():
             for batch in chunked(rows, 100):
                 User.insert_many(batch).execute()
-        return jsonify(message=f"Imported {len(rows)} users"), 201
+        return jsonify(message=f"Imported {len(rows)} users", count=len(rows)), 201
 
     # Handle CSV file upload
     if "file" in request.files:
@@ -97,7 +97,7 @@ def bulk_upload_users():
         rows = list(reader)
 
         now = datetime.now(timezone.utc)
-        data = [
+        insert_data = [
             {
                 "username": r["username"],
                 "email": r["email"],
@@ -106,8 +106,8 @@ def bulk_upload_users():
             for r in rows
         ]
         with db.atomic():
-            for batch in chunked(data, 100):
+            for batch in chunked(insert_data, 100):
                 User.insert_many(batch).execute()
-        return jsonify(message=f"Imported {len(data)} users"), 201
+        return jsonify(message=f"Imported {len(insert_data)} users", count=len(insert_data)), 201
 
     return jsonify(error="Provide JSON array or CSV file", code="VALIDATION_ERROR"), 400
