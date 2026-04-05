@@ -50,3 +50,17 @@ jobs:
 
       - name: Check coverage threshold
         run: uv run pytest --cov=app --cov-fail-under=70 -q
+
+      - name: Notify Discord on failure
+        if: failure()
+        run: |
+          curl -H "Content-Type: application/json" \
+            -d '{"content": "🚨 **CI Failed** on `${{ github.ref_name }}` — commit: `${{ github.event.head_commit.message }}` by ${{ github.actor }}\n🔗 ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+      - name: Notify Discord on success
+        if: success()
+        run: |
+          curl -H "Content-Type: application/json" \
+            -d '{"content": "✅ **CI Passed** on `${{ github.ref_name }}` — commit: `${{ github.event.head_commit.message }}` by ${{ github.actor }}"}' \
+            ${{ secrets.DISCORD_WEBHOOK_URL }}
