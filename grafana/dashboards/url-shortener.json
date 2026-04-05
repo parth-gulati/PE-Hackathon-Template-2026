@@ -51,13 +51,18 @@
     },
     {
       "id": 4,
-      "title": "Active Requests (Saturation)",
-      "type": "gauge",
+      "title": "Throughput / Saturation (req/s)",
+      "type": "timeseries",
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
       "targets": [
         {
-          "expr": "http_active_requests",
-          "legendFormat": "Active",
+          "expr": "sum(rate(http_requests_total[1m]))",
+          "legendFormat": "Total req/s",
+          "datasource": "Prometheus"
+        },
+        {
+          "expr": "sum(rate(http_errors_total[1m]))",
+          "legendFormat": "Errors/s",
           "datasource": "Prometheus"
         }
       ]
