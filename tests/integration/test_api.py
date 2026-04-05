@@ -114,9 +114,9 @@ class TestCreateShortUrl:
 
     def test_generates_unique_short_codes(self, client, sample_user):
         codes = set()
-        for _ in range(5):
+        for i in range(5):
             response = client.post("/shorten", json={
-                "original_url": "https://example.com/unique",
+                "original_url": f"https://example.com/unique/{i}",
                 "title": "Unique Test",
                 "user_id": sample_user.id,
             })

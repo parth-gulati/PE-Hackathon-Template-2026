@@ -51,6 +51,15 @@ def _create_url(data):
     except User.DoesNotExist:
         return jsonify(error="User not found", code="VALIDATION_ERROR"), 400
 
+    # Check for duplicate — same original_url for same user
+    existing = Url.select().where(
+        (Url.original_url == data["original_url"]) & (Url.user == user)
+    ).first()
+    if existing:
+        result = _url_to_dict(existing)
+        result["short_url"] = f"{request.host_url}{existing.short_code}"
+        return jsonify(result), 200
+
     # Generate unique short code with retry
     now = datetime.now(timezone.utc)
     for _ in range(MAX_SHORT_CODE_RETRIES):
@@ -74,6 +83,7 @@ def _create_url(data):
                     details=f'{{"short_code":"{short_code}","original_url":"{data["original_url"]}"}}',
                 )
             result = _url_to_dict(url)
+            result["short_url"] = f"{request.host_url}{short_code}"
             return jsonify(result), 201
         except Exception:
             continue
@@ -154,3 +164,21 @@ def get_update_delete_url(url_id):
         cache_delete(f"url:{url.short_code}")
         url.delete_instance()
         return jsonify(message="URL deleted"), 200
+
+
+@urls_bp.route("/urls/<int:url_id>/stats")
+def get_url_stats(url_id):
+    try:
+        url = Url.get_by_id(url_id)
+    except Url.DoesNotExist:
+        return jsonify(error="URL not found", code="NOT_FOUND"), 404
+
+    total_clicks = Event.select().where(
+        (Event.url == url) & (Event.event_type == "click")
+    ).count()
+    total_events = Event.select().where(Event.url == url).count()
+
+    result = _url_to_dict(url)
+    result["total_clicks"] = total_clicks
+    result["total_events"] = total_events
+    return jsonify(result)

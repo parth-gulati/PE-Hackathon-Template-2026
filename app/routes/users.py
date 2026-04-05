@@ -25,9 +25,22 @@ def list_or_create_users():
         if missing:
             return jsonify(error=f"Missing required fields: {', '.join(missing)}", code="VALIDATION_ERROR"), 400
 
+        # Validate email format
+        email = data["email"]
+        if not email or "@" not in email or "." not in email.split("@")[-1]:
+            return jsonify(error="Invalid email format", code="VALIDATION_ERROR"), 400
+
+        # Check for duplicate username
+        if User.select().where(User.username == data["username"]).exists():
+            return jsonify(error="Username already exists", code="DUPLICATE"), 409
+
+        # Check for duplicate email
+        if User.select().where(User.email == email).exists():
+            return jsonify(error="Email already exists", code="DUPLICATE"), 409
+
         user = User.create(
             username=data["username"],
-            email=data["email"],
+            email=email,
             created_at=datetime.now(timezone.utc),
         )
         return jsonify(model_to_dict(user)), 201
@@ -55,8 +68,18 @@ def get_update_delete_user(user_id):
             return jsonify(error="Request body must be JSON", code="VALIDATION_ERROR"), 400
 
         if "username" in data:
+            existing = User.select().where(
+                (User.username == data["username"]) & (User.id != user.id)
+            ).exists()
+            if existing:
+                return jsonify(error="Username already exists", code="DUPLICATE"), 409
             user.username = data["username"]
         if "email" in data:
+            existing = User.select().where(
+                (User.email == data["email"]) & (User.id != user.id)
+            ).exists()
+            if existing:
+                return jsonify(error="Email already exists", code="DUPLICATE"), 409
             user.email = data["email"]
 
         user.save()

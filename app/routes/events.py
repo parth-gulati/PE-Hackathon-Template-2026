@@ -40,11 +40,23 @@ def list_or_create_events():
         if missing:
             return jsonify(error=f"Missing required fields: {', '.join(missing)}", code="VALIDATION_ERROR"), 400
 
+        # Validate event_type
+        valid_types = ("click", "created", "updated", "deleted")
+        if data["event_type"] not in valid_types:
+            return jsonify(
+                error=f"Invalid event_type. Must be one of: {', '.join(valid_types)}",
+                code="VALIDATION_ERROR",
+            ), 400
+
         # Validate url exists
         try:
-            Url.get_by_id(data["url_id"])
+            url = Url.get_by_id(data["url_id"])
         except Url.DoesNotExist:
             return jsonify(error="URL not found", code="VALIDATION_ERROR"), 400
+
+        # Reject click events on inactive URLs
+        if data["event_type"] == "click" and not url.is_active:
+            return jsonify(error="Cannot create click event for inactive URL", code="VALIDATION_ERROR"), 400
 
         # Validate user exists
         try:
