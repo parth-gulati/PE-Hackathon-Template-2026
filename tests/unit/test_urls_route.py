@@ -1,7 +1,5 @@
 """Unit tests for /shorten, /urls endpoints."""
 
-import os
-
 import pytest
 import flask
 from peewee import SqliteDatabase
@@ -11,7 +9,6 @@ from app.models import Event, Url, User
 from app.routes.urls import urls_bp
 
 test_db = SqliteDatabase(":memory:")
-TEST_API_KEY = "test-key-for-urls"
 
 
 def setup_module():
@@ -46,32 +43,28 @@ def client():
     return app.test_client()
 
 
-@pytest.fixture(autouse=True)
-def set_api_key():
-    os.environ["API_KEY"] = TEST_API_KEY
-    yield
-    os.environ.pop("API_KEY", None)
-
-
 @pytest.fixture
 def sample_user():
     return User.create(username="testuser", email="test@example.com", created_at="2025-01-01 00:00:00")
 
 
 @pytest.fixture
-def auth_headers():
-    return {"X-API-Key": TEST_API_KEY}
+def sample_url(sample_user):
+    return Url.create(
+        user=sample_user, short_code="TSTURL", original_url="https://example.com/test",
+        title="Test URL", is_active=True, created_at="2025-01-01", updated_at="2025-01-01",
+    )
 
 
 # --- POST /shorten ---
 
 class TestCreateShortUrl:
-    def test_creates_url_successfully(self, client, sample_user, auth_headers):
+    def test_creates_url_successfully(self, client, sample_user):
         response = client.post("/shorten", json={
             "original_url": "https://example.com/long-page",
             "title": "Test Link",
             "user_id": sample_user.id,
-        }, headers=auth_headers)
+        })
         assert response.status_code == 201
         data = response.get_json()
         assert "short_code" in data
@@ -80,56 +73,70 @@ class TestCreateShortUrl:
         assert data["user_id"] == sample_user.id
         assert data["is_active"] is True
 
-    def test_logs_creation_event(self, client, sample_user, auth_headers):
+    def test_logs_creation_event(self, client, sample_user):
         client.post("/shorten", json={
             "original_url": "https://example.com/event-test",
             "title": "Event Test",
             "user_id": sample_user.id,
-        }, headers=auth_headers)
+        })
         assert Event.select().count() == 1
         event = Event.select().first()
         assert event.event_type == "created"
 
-    def test_rejects_missing_fields(self, client, sample_user, auth_headers):
-        response = client.post("/shorten", json={"title": "No URL"}, headers=auth_headers)
+    def test_rejects_missing_fields(self, client, sample_user):
+        response = client.post("/shorten", json={"title": "No URL"})
         assert response.status_code == 400
         data = response.get_json()
         assert data["code"] == "VALIDATION_ERROR"
         assert "original_url" in data["error"]
 
-    def test_rejects_invalid_url(self, client, sample_user, auth_headers):
+    def test_rejects_invalid_url(self, client, sample_user):
         response = client.post("/shorten", json={
             "original_url": "not-a-url",
             "title": "Bad URL",
             "user_id": sample_user.id,
-        }, headers=auth_headers)
+        })
         assert response.status_code == 400
         assert response.get_json()["code"] == "VALIDATION_ERROR"
 
-    def test_rejects_nonexistent_user(self, client, auth_headers):
+    def test_rejects_nonexistent_user(self, client):
         response = client.post("/shorten", json={
             "original_url": "https://example.com/page",
             "title": "No User",
             "user_id": 99999,
-        }, headers=auth_headers)
+        })
         assert response.status_code == 400
         assert response.get_json()["code"] == "VALIDATION_ERROR"
 
-    def test_rejects_non_json_body(self, client, auth_headers):
-        response = client.post("/shorten", data="not json", content_type="text/plain",
-                               headers=auth_headers)
+    def test_rejects_non_json_body(self, client):
+        response = client.post("/shorten", data="not json", content_type="text/plain")
         assert response.status_code == 400
 
-    def test_generates_unique_short_codes(self, client, sample_user, auth_headers):
+    def test_generates_unique_short_codes(self, client, sample_user):
         codes = set()
         for _ in range(5):
             response = client.post("/shorten", json={
                 "original_url": "https://example.com/unique",
                 "title": "Unique Test",
                 "user_id": sample_user.id,
-            }, headers=auth_headers)
+            })
             codes.add(response.get_json()["short_code"])
-        assert len(codes) == 5  # all unique
+        assert len(codes) == 5
+
+
+# --- POST /urls ---
+
+class TestCreateUrlViaUrls:
+    def test_creates_url_via_post_urls(self, client, sample_user):
+        response = client.post("/urls", json={
+            "original_url": "https://example.com/via-urls",
+            "title": "Via /urls",
+            "user_id": sample_user.id,
+        })
+        assert response.status_code == 201
+        data = response.get_json()
+        assert "short_code" in data
+        assert data["original_url"] == "https://example.com/via-urls"
 
 
 # --- GET /urls ---
@@ -182,26 +189,67 @@ class TestListUrls:
 # --- GET /urls/<id> ---
 
 class TestGetUrl:
-    def test_returns_url_by_id(self, client, sample_user):
-        url = Url.create(user=sample_user, short_code="GETURL", original_url="https://a.com",
-                         title="Get Test", is_active=True, created_at="2025-01-01", updated_at="2025-01-01")
-        response = client.get(f"/urls/{url.id}")
+    def test_returns_url_by_id(self, client, sample_url):
+        response = client.get(f"/urls/{sample_url.id}")
         assert response.status_code == 200
         data = response.get_json()
-        assert data["short_code"] == "GETURL"
-        assert data["title"] == "Get Test"
+        assert data["short_code"] == "TSTURL"
 
-    def test_includes_event_count(self, client, sample_user):
-        url = Url.create(user=sample_user, short_code="EVTCNT", original_url="https://a.com",
-                         title="Events", is_active=True, created_at="2025-01-01", updated_at="2025-01-01")
-        Event.create(url=url, user=sample_user, event_type="click",
+    def test_includes_event_count(self, client, sample_user, sample_url):
+        Event.create(url=sample_url, user=sample_user, event_type="click",
                      timestamp="2025-01-01", details="{}")
-        Event.create(url=url, user=sample_user, event_type="click",
+        Event.create(url=sample_url, user=sample_user, event_type="click",
                      timestamp="2025-01-02", details="{}")
-        response = client.get(f"/urls/{url.id}")
+        response = client.get(f"/urls/{sample_url.id}")
         assert response.get_json()["event_count"] == 2
 
     def test_returns_404_for_missing_url(self, client):
         response = client.get("/urls/99999")
         assert response.status_code == 404
         assert response.get_json()["code"] == "NOT_FOUND"
+
+
+# --- PUT /urls/<id> ---
+
+class TestUpdateUrl:
+    def test_update_title(self, client, sample_url):
+        response = client.put(f"/urls/{sample_url.id}", json={"title": "Updated Title"})
+        assert response.status_code == 200
+        assert response.get_json()["title"] == "Updated Title"
+
+    def test_update_is_active(self, client, sample_url):
+        response = client.put(f"/urls/{sample_url.id}", json={"is_active": False})
+        assert response.status_code == 200
+        assert response.get_json()["is_active"] is False
+
+    def test_update_original_url(self, client, sample_url):
+        response = client.put(f"/urls/{sample_url.id}", json={"original_url": "https://new.com"})
+        assert response.status_code == 200
+        assert response.get_json()["original_url"] == "https://new.com"
+
+    def test_update_rejects_invalid_url(self, client, sample_url):
+        response = client.put(f"/urls/{sample_url.id}", json={"original_url": "bad"})
+        assert response.status_code == 400
+
+    def test_update_404_for_missing(self, client):
+        response = client.put("/urls/99999", json={"title": "nope"})
+        assert response.status_code == 404
+
+
+# --- DELETE /urls/<id> ---
+
+class TestDeleteUrl:
+    def test_delete_url(self, client, sample_url):
+        response = client.delete(f"/urls/{sample_url.id}")
+        assert response.status_code == 200
+        assert Url.select().count() == 0
+
+    def test_delete_removes_events(self, client, sample_user, sample_url):
+        Event.create(url=sample_url, user=sample_user, event_type="click",
+                     timestamp="2025-01-01", details="{}")
+        client.delete(f"/urls/{sample_url.id}")
+        assert Event.select().count() == 0
+
+    def test_delete_404_for_missing(self, client):
+        response = client.delete("/urls/99999")
+        assert response.status_code == 404

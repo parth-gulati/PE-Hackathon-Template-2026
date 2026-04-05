@@ -69,6 +69,22 @@ services:
       - app2
     restart: always
 
+  discord-webhook:
+    build: ./discord-webhook
+    environment:
+      DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1490188345991631051/7sSJICJYJzTwDN-H85G3Lx2h9MOmsK80UOOchBbAnFFTTYFtvFR6bZvkzAkQzjuPcIgE"
+    restart: always
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    depends_on:
+      - discord-webhook
+    restart: always
+
   prometheus:
     image: prom/prometheus:latest
     ports:
@@ -79,6 +95,7 @@ services:
     depends_on:
       - app1
       - app2
+      - alertmanager
     restart: always
 
   grafana:
