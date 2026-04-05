@@ -1,192 +1,201 @@
-# MLH PE Hackathon — Flask + Peewee + PostgreSQL Template
+# URL Shortener — Production Engineering Hackathon
 
-A minimal hackathon starter template. You get the scaffolding and database wiring — you build the models, routes, and CSV loading logic.
+A production-grade URL shortener API demonstrating operational excellence: comprehensive testing, horizontal scaling, structured observability, and chaos resilience.
 
-**Stack:** Flask · Peewee ORM · PostgreSQL · uv
+## Architecture
 
-## **Important**
-
-You need to work with around the seed files that you can find in [MLH PE Hackathon](https://mlh-pe-hackathon.com) platform. This will help you build the schema for the database and have some data to do some testing and submit your project for judging. If you need help with this, reach out on Discord or on the Q&A tab on the platform.
-
-## Prerequisites
-
-- **uv** — a fast Python package manager that handles Python versions, virtual environments, and dependencies automatically.
-  Install it with:
-  ```bash
-  # macOS / Linux
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-
-  # Windows (PowerShell)
-  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-  ```
-  For other methods see the [uv installation docs](https://docs.astral.sh/uv/getting-started/installation/).
-- PostgreSQL running locally (you can use Docker or a local instance)
-
-## uv Basics
-
-`uv` manages your Python version, virtual environment, and dependencies automatically — no manual `python -m venv` needed.
-
-| Command | What it does |
-|---------|--------------|
-| `uv sync` | Install all dependencies (creates `.venv` automatically) |
-| `uv run <script>` | Run a script using the project's virtual environment |
-| `uv add <package>` | Add a new dependency |
-| `uv remove <package>` | Remove a dependency |
+```
+                    ┌──────────┐
+                    │  Locust  │ (load testing)
+                    └────┬─────┘
+                         │
+                    ┌────▼─────┐
+   ┌───────────────►│  Nginx   │ (load balancer, port 80)
+   │                └────┬─────┘
+   │           ┌─────────┴─────────┐
+   │      ┌────▼─────┐       ┌────▼─────┐
+   │      │  App 1   │       │  App 2   │ (gunicorn, 8 workers × 4 threads)
+   │      └────┬─────┘       └────┬─────┘
+   │           │                  │
+   │      ┌────▼──────────────────▼────┐
+   │      │        PostgreSQL          │ (port 5432)
+   │      └────────────────────────────┘
+   │      ┌────────────────────────────┐
+   │      │          Redis             │ (port 6379, caching + rate limiting)
+   │      └────────────────────────────┘
+   │
+   │      ┌────────────────────────────┐
+   ├──────│       Prometheus           │ (port 9090, scrapes /metrics)
+   │      └────────────┬───────────────┘
+   │      ┌────────────▼───────────────┐
+   └──────│        Grafana             │ (port 3001, dashboards)
+          └────────────────────────────┘
+```
 
 ## Quick Start
 
 ```bash
 # 1. Clone the repo
-git clone <repo-url> && cd mlh-pe-hackathon
+git clone https://github.com/parth-gulati/PE-Hackathon-Template-2026.git
+cd PE-Hackathon-Template-2026
 
-# 2. Install dependencies
+# 2. Start all services
+docker-compose up --build -d
+
+# 3. Wait for healthy postgres, then restart nginx (podman DNS fix)
+sleep 5
+docker-compose restart nginx
+
+# 4. Seed the database
+docker-compose exec app1 uv run python seed_data.py
+
+# 5. Verify
+curl http://localhost/health
+# → {"status": "ok"}
+```
+
+## Local Development (without Docker)
+
+```bash
+# 1. Install dependencies
 uv sync
 
-# 3. Create the database
+# 2. Create database
 createdb hackathon_db
 
-# 4. Configure environment
-cp .env.example .env   # edit if your DB credentials differ
+# 3. Configure environment
+cp .env.example .env
 
-# 5. Run the server
+# 4. Run the server
 uv run run.py
 
-# 6. Verify
-curl http://localhost:5000/health
-# → {"status":"ok"}
+# 5. Run tests
+uv run pytest -v
 ```
+
+## API Endpoints
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/health` | None | Health check with DB connectivity verification |
+| `POST` | `/shorten` | API Key | Create a short URL |
+| `GET` | `/<short_code>` | None | Redirect to original URL (301) |
+| `GET` | `/urls` | None | List URLs (paginated, filterable by `user_id`, `is_active`) |
+| `GET` | `/urls/<id>` | None | URL details with event count |
+| `GET` | `/users` | None | List users (paginated) |
+| `GET` | `/users/<id>` | None | User details |
+| `GET` | `/metrics` | None | Prometheus metrics |
+
+### Authentication
+
+Write endpoints require `X-API-Key` header. Set the key via `API_KEY` environment variable (default: `dev-api-key-change-me`).
+
+```bash
+curl -X POST http://localhost/shorten \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: dev-api-key-change-me" \
+  -d '{"original_url": "https://example.com", "title": "My Link", "user_id": 1}'
+```
+
+### Error Responses
+
+All errors return structured JSON:
+
+```json
+{"error": "Human-readable message", "code": "ERROR_CODE"}
+```
+
+| Status | Code | Meaning |
+|--------|------|---------|
+| 400 | `VALIDATION_ERROR` | Bad input |
+| 401 | `AUTH_REQUIRED` | Missing API key |
+| 403 | `AUTH_INVALID` | Wrong API key |
+| 404 | `NOT_FOUND` | Resource doesn't exist |
+| 410 | `INACTIVE` | URL is deactivated |
+| 429 | `RATE_LIMITED` | Too many requests |
+| 500 | `INTERNAL_ERROR` | Server error (no stack trace exposed) |
+
+## Monitoring
+
+- **Grafana Dashboard:** http://localhost:3001 (no login required, auto-provisioned)
+- **Prometheus:** http://localhost:9090
+- **Locust:** `uv run locust --host=http://localhost` → http://localhost:8089
+
+The Grafana dashboard shows the four golden signals: Traffic, Latency, Errors, Saturation.
+
+## Testing
+
+```bash
+# Run all tests
+uv run pytest -v
+
+# Run with coverage
+uv run pytest --cov=app --cov-report=term-missing
+
+# Run specific test file
+uv run pytest tests/unit/test_urls_route.py -v
+```
+
+**105 tests | 78% coverage | CI blocks deploys below 70%**
+
+## Load Testing
+
+```bash
+uv run locust --host=http://localhost
+# Open http://localhost:8089
+# Set users: 50 (Bronze), 200 (Silver), 500 (Gold)
+```
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_NAME` | `hackathon_db` | PostgreSQL database name |
+| `DATABASE_HOST` | `localhost` | Database host |
+| `DATABASE_PORT` | `5432` | Database port |
+| `DATABASE_USER` | `postgres` | Database user |
+| `DATABASE_PASSWORD` | `postgres` | Database password |
+| `API_KEY` | `dev-api-key-change-me` | API key for write endpoints |
+| `RATE_LIMIT` | `1000/minute` | Default rate limit |
+| `REDIS_URL` | `memory://` | Redis URL for caching and rate limiting |
+| `CACHE_TTL` | `300` | Redis cache TTL in seconds |
 
 ## Project Structure
 
 ```
-mlh-pe-hackathon/
 ├── app/
-│   ├── __init__.py          # App factory (create_app)
-│   ├── database.py          # DatabaseProxy, BaseModel, connection hooks
+│   ├── __init__.py          # App factory, error handlers, rate limiting
+│   ├── auth.py              # API key authentication decorator
+│   ├── cache.py             # Redis caching with graceful degradation
+│   ├── database.py          # Peewee database proxy and connection hooks
+│   ├── logging_config.py    # Structured JSON logging
+│   ├── metrics.py           # Prometheus metrics and /metrics endpoint
+│   ├── utils.py             # Short code generation, URL validation
 │   ├── models/
-│   │   └── __init__.py      # Import your models here
+│   │   ├── user.py          # User model
+│   │   ├── url.py           # URL model (unique short_code, indexed)
+│   │   └── event.py         # Event model (click/create tracking)
 │   └── routes/
-│       └── __init__.py      # register_routes() — add blueprints here
-├── .env.example             # DB connection template
-├── .gitignore               # Python + uv gitignore
-├── .python-version          # Pin Python version for uv
-├── pyproject.toml           # Project metadata + dependencies
-├── run.py                   # Entry point: uv run run.py
-└── README.md
+│       ├── users.py         # GET /users, /users/<id>
+│       ├── urls.py          # POST /shorten, GET /urls, /urls/<id>
+│       └── redirect.py      # GET /<short_code> with caching
+├── tests/
+│   └── unit/                # 105 unit tests
+├── docs/
+│   ├── failure-modes.md     # What breaks and how it recovers
+│   └── runbook.md           # Emergency response guide
+├── nginx/nginx.conf         # Load balancer config
+├── prometheus/prometheus.yml # Metrics scraping config
+├── grafana/                 # Dashboard auto-provisioning
+├── docker-compose.yml       # Full stack: postgres, redis, app×2, nginx, prometheus, grafana
+├── Dockerfile               # Python 3.13 + uv + gunicorn
+├── locustfile.py            # Load test scenarios
+└── seed_data.py             # CSV import with sequence fix
 ```
 
-## How to Add a Model
+## Tech Stack
 
-1. Create a file in `app/models/`, e.g. `app/models/product.py`:
-
-```python
-from peewee import CharField, DecimalField, IntegerField
-
-from app.database import BaseModel
-
-
-class Product(BaseModel):
-    name = CharField()
-    category = CharField()
-    price = DecimalField(decimal_places=2)
-    stock = IntegerField()
-```
-
-2. Import it in `app/models/__init__.py`:
-
-```python
-from app.models.product import Product
-```
-
-3. Create the table (run once in a Python shell or a setup script):
-
-```python
-from app.database import db
-from app.models.product import Product
-
-db.create_tables([Product])
-```
-
-## How to Add Routes
-
-1. Create a blueprint in `app/routes/`, e.g. `app/routes/products.py`:
-
-```python
-from flask import Blueprint, jsonify
-from playhouse.shortcuts import model_to_dict
-
-from app.models.product import Product
-
-products_bp = Blueprint("products", __name__)
-
-
-@products_bp.route("/products")
-def list_products():
-    products = Product.select()
-    return jsonify([model_to_dict(p) for p in products])
-```
-
-2. Register it in `app/routes/__init__.py`:
-
-```python
-def register_routes(app):
-    from app.routes.products import products_bp
-    app.register_blueprint(products_bp)
-```
-
-## How to Load CSV Data
-
-```python
-import csv
-from peewee import chunked
-from app.database import db
-from app.models.product import Product
-
-def load_csv(filepath):
-    with open(filepath, newline="") as f:
-        reader = csv.DictReader(f)
-        rows = list(reader)
-
-    with db.atomic():
-        for batch in chunked(rows, 100):
-            Product.insert_many(batch).execute()
-```
-
-## Useful Peewee Patterns
-
-```python
-from peewee import fn
-from playhouse.shortcuts import model_to_dict
-
-# Select all
-products = Product.select()
-
-# Filter
-cheap = Product.select().where(Product.price < 10)
-
-# Get by ID
-p = Product.get_by_id(1)
-
-# Create
-Product.create(name="Widget", category="Tools", price=9.99, stock=50)
-
-# Convert to dict (great for JSON responses)
-model_to_dict(p)
-
-# Aggregations
-avg_price = Product.select(fn.AVG(Product.price)).scalar()
-total = Product.select(fn.SUM(Product.stock)).scalar()
-
-# Group by
-from peewee import fn
-query = (Product
-         .select(Product.category, fn.COUNT(Product.id).alias("count"))
-         .group_by(Product.category))
-```
-
-## Tips
-
-- Use `model_to_dict` from `playhouse.shortcuts` to convert model instances to dictionaries for JSON responses.
-- Wrap bulk inserts in `db.atomic()` for transactional safety and performance.
-- The template uses `teardown_appcontext` for connection cleanup, so connections are closed even when requests fail.
-- Check `.env.example` for all available configuration options.
+**Application:** Flask, Peewee ORM, PostgreSQL, Redis, gunicorn
+**Infrastructure:** Docker Compose, Nginx, Prometheus, Grafana
+**Testing:** pytest (105 tests, 78% coverage), Locust (load testing)
+**CI/CD:** GitHub Actions (auto-test on push, 70% coverage gate)
