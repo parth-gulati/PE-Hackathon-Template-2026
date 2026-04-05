@@ -6,6 +6,8 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from app.database import db, init_db
+from app.logging_config import setup_logging
+from app.metrics import metrics_bp, setup_metrics
 from app.routes import register_routes
 
 limiter = Limiter(
@@ -24,6 +26,7 @@ def create_app():
 
     init_db(app)
     limiter.init_app(app)
+    setup_logging(app)
 
     from app.models import Event, Url, User  # noqa: F401 - registers models with Peewee
 
@@ -37,6 +40,8 @@ def create_app():
         pass  # Tables may already exist
 
     register_routes(app)
+    app.register_blueprint(metrics_bp)
+    setup_metrics(app)
 
     @app.errorhandler(400)
     def bad_request(e):
